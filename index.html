@@ -140,6 +140,7 @@ input[type=date],input[type=month]{-webkit-appearance:none;appearance:none;displ
 
     <div class="card">
       <div class="row"><label for="profit">الربح اليومي</label><input class="num" id="profit" inputmode="decimal" placeholder="0"></div>
+      <div class="row"><label for="credit">المبيعات الآجلة<small class="sub" style="display:block;font-weight:400">رقم لحاله، ما يدخل في الحساب</small></label><input class="num" id="credit" inputmode="decimal" placeholder="0"></div>
     </div>
 
     <div class="btns">
@@ -161,6 +162,7 @@ input[type=date],input[type=month]{-webkit-appearance:none;appearance:none;displ
       <div class="stat"><div class="k">إجمالي المصروفات الشهرية</div><div class="v" id="m-exp">0</div></div>
       <div class="stat"><div class="k">سداد العملاء</div><div class="v" id="m-pay">0</div></div>
       <div class="stat"><div class="k">مجموع الفوارق</div><div class="v" id="m-diff">0</div></div>
+      <div class="stat"><div class="k">المبيعات الآجلة الشهرية</div><div class="v" id="m-credit">0</div></div>
       <div class="stat big"><div class="k">إجمالي الربح الشهري</div><div class="v" id="m-profit">0</div></div>
     </div>
     <div class="card">
@@ -214,7 +216,7 @@ function readList(id){return [...$(id).querySelectorAll(".item")].map(w=>({name:
 // --- form state ---
 function readForm(){
   return {date:$("date").value,cashier:$("cashier").value.trim(),float:$("float").value.trim(),sales:$("sales").value.trim(),
-    payments:readList("payments"),card:$("card").value.trim(),expenses:readList("expenses"),cash:$("cash").value.trim(),profit:$("profit").value.trim()};
+    payments:readList("payments"),card:$("card").value.trim(),expenses:readList("expenses"),cash:$("cash").value.trim(),profit:$("profit").value.trim(),credit:$("credit").value.trim()};
 }
 function totals(f){
   const pay=f.payments.reduce((s,x)=>s+toNum(x.amount),0);
@@ -226,7 +228,7 @@ function totals(f){
 function fillForm(f){
   f=f||{};
   $("cashier").value=f.cashier||LS.get("cb_cashier","");
-  ["float","sales","card","cash","profit"].forEach(k=>$(k).value=f[k]||"");
+  ["float","sales","card","cash","profit","credit"].forEach(k=>$(k).value=f[k]||"");
   $("payments").innerHTML="";$("expenses").innerHTML="";
   (f.payments&&f.payments.length?f.payments:[{}]).forEach(x=>addItem("payments",x.name,x.amount,"اسم العميل"));
   (f.expenses&&f.expenses.length?f.expenses:[{}]).forEach(x=>addItem("expenses",x.name,x.amount,"البيان (مثلاً: كهرباء)"));
@@ -252,6 +254,7 @@ function report(f){
   r+="صافي الكاش بالصندوق: "+fmt(toNum(f.cash))+c+"\n▪️ الإجمالي: "+fmt(t.have)+c+"\n\n";
   r+="الفارق: "+diffText(t.diff)+(Math.abs(t.diff)>=0.005?" "+fmt(Math.abs(t.diff))+c:"")+"\n";
   r+="الربح اليومي: "+fmt(t.profit)+c;
+  if(toNum(f.credit))r+="\nالمبيعات الآجلة: "+fmt(toNum(f.credit))+c;
   return r;
 }
 async function copyText(s){try{await navigator.clipboard.writeText(s);toast("تم النسخ ✓")}catch(e){
@@ -278,16 +281,17 @@ async function deleteDay(id){
 // --- month ---
 function renderMonth(){
   const m=$("month").value;const list=Object.keys(days).filter(k=>k.startsWith(m)).sort();
-  let s=0,e=0,p=0,pay=0,d=0;
-  list.forEach(k=>{const x=days[k];s+=toNum(x.sales);e+=x.expTotal||0;p+=toNum(x.profit);pay+=x.payTotal||0;d+=x.diff||0});
+  let s=0,e=0,p=0,pay=0,d=0,cr=0;
+  list.forEach(k=>{const x=days[k];s+=toNum(x.sales);e+=x.expTotal||0;p+=toNum(x.profit);pay+=x.payTotal||0;d+=x.diff||0;cr+=toNum(x.credit)});
+  $("m-credit").textContent=fmt(cr);
   $("m-sales").textContent=fmt(s);$("m-exp").textContent=fmt(e);$("m-profit").textContent=fmt(p)+" "+currency;
   $("m-pay").textContent=fmt(pay);$("m-diff").textContent=(d<-0.004?"−":d>0.004?"+":"")+fmt(Math.abs(d));
   $("m-diff").className="v "+(d<-0.004?"neg":d>0.004?"pos":"");
   $("m-count").textContent="("+list.length+" يوم)";
   if(!list.length){$("m-table").innerHTML='<div class="empty">ما في أيام محفوظة لهذا الشهر</div>';return}
-  let h='<table><tr><th>التاريخ</th><th>المبيعات</th><th>المصروفات</th><th>الفارق</th><th>الربح</th><th></th></tr>';
+  let h='<table><tr><th>التاريخ</th><th>المبيعات</th><th>المصروفات</th><th>الفارق</th><th>الربح</th><th>آجل</th><th></th></tr>';
   list.forEach(k=>{const x=days[k],df=x.diff||0;
-    h+='<tr class="click" data-id="'+k+'"><td>'+k.slice(8)+'/'+k.slice(5,7)+'</td><td class="n">'+fmt(toNum(x.sales))+'</td><td class="n">'+fmt(x.expTotal||0)+'</td><td class="n '+(df<-0.004?"neg":df>0.004?"pos":"")+'">'+(df<-0.004?"−":df>0.004?"+":"")+fmt(Math.abs(df))+'</td><td class="n">'+fmt(toNum(x.profit))+'</td><td><button class="x-del" data-del="'+k+'" style="border:0;background:none;color:var(--bad);cursor:pointer;font-size:16px">🗑</button></td></tr>'});
+    h+='<tr class="click" data-id="'+k+'"><td>'+k.slice(8)+'/'+k.slice(5,7)+'</td><td class="n">'+fmt(toNum(x.sales))+'</td><td class="n">'+fmt(x.expTotal||0)+'</td><td class="n '+(df<-0.004?"neg":df>0.004?"pos":"")+'">'+(df<-0.004?"−":df>0.004?"+":"")+fmt(Math.abs(df))+'</td><td class="n">'+fmt(toNum(x.profit))+'</td><td class="n">'+(toNum(x.credit)?fmt(toNum(x.credit)):"")+'</td><td><button class="x-del" data-del="'+k+'" style="border:0;background:none;color:var(--bad);cursor:pointer;font-size:16px">🗑</button></td></tr>'});
   $("m-table").innerHTML=h+'</table><div class="sub" style="margin-top:8px">اضغط على أي يوم لفتحه وتعديله</div>';
   $("m-table").querySelectorAll("tr.click").forEach(tr=>tr.onclick=ev=>{
     if(ev.target.dataset.del){deleteDay(ev.target.dataset.del);return}
@@ -297,7 +301,7 @@ function monthReport(){
   const m=$("month").value;const c=" "+currency;
   return "📊 تقرير شهر "+m+"\nعدد الأيام: "+$("m-count").textContent.replace(/[()]/g,"")+
     "\nإجمالي المبيعات الشهرية: "+$("m-sales").textContent+c+"\nإجمالي المصروفات الشهرية: "+$("m-exp").textContent+c+
-    "\nسداد العملاء: "+$("m-pay").textContent+c+"\nمجموع الفوارق: "+$("m-diff").textContent+c+"\nإجمالي الربح الشهري: "+$("m-profit").textContent;
+    "\nسداد العملاء: "+$("m-pay").textContent+c+"\nمجموع الفوارق: "+$("m-diff").textContent+c+"\nالمبيعات الآجلة الشهرية: "+$("m-credit").textContent+c+"\nإجمالي الربح الشهري: "+$("m-profit").textContent;
 }
 
 // --- tabs ---
@@ -310,7 +314,7 @@ $("currency").onchange=e=>{currency=e.target.value;LS.set("cb_cur",currency);$("
 $("tab-day").onclick=()=>showTab("day");$("tab-month").onclick=()=>showTab("month");
 $("add-pay").onclick=()=>addItem("payments","","","اسم العميل");
 $("add-exp").onclick=()=>addItem("expenses","","","البيان (مثلاً: كهرباء)");
-["cashier","float","sales","card","cash","profit"].forEach(id=>$(id).addEventListener("input",calc));
+["cashier","float","sales","card","cash","profit","credit"].forEach(id=>$(id).addEventListener("input",calc));
 $("date").onchange=()=>{const d=$("date").value;fillForm(days[d]||{cashier:$("cashier").value})};
 $("save").onclick=saveDay;
 $("copy").onclick=()=>copyText(report(readForm()));
